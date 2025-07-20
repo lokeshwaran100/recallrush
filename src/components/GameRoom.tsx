@@ -30,9 +30,19 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
     startRound
   } = useSupabaseRoom(roomCode, nickname);
 
+  // Synchronize local isReady state with player data from database
+  React.useEffect(() => {
+    const currentPlayer = players.find(player => player.nickname === nickname);
+    if (currentPlayer) {
+      console.log(`Syncing ready state for ${nickname}: ${currentPlayer.is_ready}`);
+      setIsReady(currentPlayer.is_ready);
+    }
+  }, [players, nickname]);
+
   // Handle ready toggle
   const handleToggleReady = async () => {
     const newReadyState = !isReady;
+    console.log(`Toggling ready state for ${nickname}: ${isReady} -> ${newReadyState}`);
     setIsReady(newReadyState);
     await supabaseToggleReady(newReadyState);
   };
@@ -85,9 +95,9 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
   };
 
   // Handle sequence hidden callback
-  const handleSequenceHidden = () => {
+  const handleSequenceHidden = React.useCallback(() => {
     setSequenceHidden(true);
-  };
+  }, []);
 
   // Reset sequence hidden state when new round starts
   React.useEffect(() => {
@@ -95,6 +105,11 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
       setSequenceHidden(false);
     }
   }, [currentRound?.id]);
+
+  // Monitor currentRound changes
+  React.useEffect(() => {
+    console.log('Current round changed:', currentRound);
+  }, [currentRound]);
 
   // Check if all players are ready
   const allPlayersReady = players.every(player => 
@@ -108,6 +123,7 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
   console.log('Debug - Is host:', isHost);
   console.log('Debug - All players ready:', allPlayersReady);
   console.log('Debug - Can start game:', canStartGame);
+  console.log('Debug - Current round:', currentRound);
 
   // Alternative simpler logic: host can always start if there are players
   const simpleCanStartGame = isHost && players.length >= 1;
@@ -134,6 +150,7 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
           <div className="lg:col-span-2">
             {currentRound ? (
               <SequenceDisplay
+                key={currentRound.id}
                 sequence={currentRound.sequence}
                 roundNumber={currentRound.round_number}
                 timePerRound={room.settings.timePerRound}

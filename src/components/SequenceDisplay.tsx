@@ -47,7 +47,7 @@ export default function SequenceDisplay({
       });
     }, 1000);
     return () => clearInterval(countdownInterval);
-  }, [sequence, onSequenceHidden, timePerRound]);
+  }, [sequence, roundId]); // Remove onSequenceHidden and timePerRound from dependencies
 
   // Start answer timer when sequence is hidden
   React.useEffect(() => {
@@ -64,8 +64,7 @@ export default function SequenceDisplay({
       });
     }, 1000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line
-  }, [showSequence, submitted, timePerRound]);
+  }, [showSequence, submitted]); // Remove timePerRound from dependencies
 
   // Submit answer to Supabase
   const handleSubmit = async () => {
