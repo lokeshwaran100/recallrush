@@ -57,19 +57,35 @@ export default function SequenceDisplay({
     if (showSequence || submitted) return;
     setAnswerTimer(timePerRound);
     setStartTime(Date.now());
-    const timer = setInterval(() => {
+    const timer = setInterval(async () => {
       setAnswerTimer(prev => {
         if (prev <= 1) {
           clearInterval(timer);
           handleSubmit();
-          onRoundComplete();
+          // Only call onRoundComplete if the round is still active
+          // Check if round is still active before calling onRoundComplete
+          (async () => {
+            try {
+              const { data: roundData, error } = await supabase
+                .from('game_rounds')
+                .select('status')
+                .eq('id', roundId)
+                .single();
+              
+              if (!error && roundData && roundData.status === 'active') {
+                onRoundComplete();
+              }
+            } catch (err) {
+              console.error('Error checking round status:', err);
+            }
+          })();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [showSequence, submitted]); // Remove timePerRound from dependencies
+  }, [showSequence, submitted, roundId]); // Add roundId to dependencies
 
   // Submit answer to Supabase
   const handleSubmit = async () => {

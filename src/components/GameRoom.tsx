@@ -105,9 +105,13 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
   }, []);
 
   // Handle round completion
-  const handleRoundComplete = React.useCallback(() => {
-    setShowRoundResults(true);
-  }, []);
+  const handleRoundComplete = React.useCallback(async () => {
+    // Only show results if we're not already showing them and the round is completed
+    if (!showRoundResults && currentRound && currentRound.status === 'completed') {
+      console.log('Showing round results for completed round');
+      setShowRoundResults(true);
+    }
+  }, [showRoundResults, currentRound]);
 
   // Handle next round
   const handleNextRound = React.useCallback(async () => {
@@ -219,18 +223,39 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
       // Check if all players have submitted answers
       const checkRoundCompletion = async () => {
         try {
+          // Double-check that the round is still active before proceeding
+          const { data: roundData, error: roundError } = await supabase
+            .from('game_rounds')
+            .select('status')
+            .eq('id', currentRound.id)
+            .single();
+          
+          if (roundError || !roundData || roundData.status !== 'active') {
+            console.log('Round is no longer active, stopping completion check');
+            return;
+          }
+
           const { data: answers, error } = await supabase
             .from('round_answers')
             .select('nickname')
             .eq('round_id', currentRound.id);
 
           if (!error && answers && answers.length >= players.length) {
-            // All players have submitted, show results after a short delay
+            // All players have submitted, mark round as completed and show results
+            console.log('All players submitted, completing round');
+            
+            // Mark the round as completed to prevent further triggers
+            await supabase
+              .from('game_rounds')
+              .update({ status: 'completed' })
+              .eq('id', currentRound.id);
+            
+            // Show results after a short delay
             setTimeout(() => {
               if (!showRoundResults && !showFinalResults) {
                 handleRoundComplete();
               }
-            }, 2000); // Wait 2 seconds after last submission
+            }, 1000); // Reduced delay since we're marking as completed
           }
         } catch (err) {
           console.error('Error checking round completion:', err);
