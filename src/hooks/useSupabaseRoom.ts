@@ -167,13 +167,39 @@ export function useSupabaseRoom(roomCode: string | null, nickname: string) {
 
   // Start game (host only)
   const startGame = useCallback(async () => {
-    if (!room || room.host_nickname !== nickname) return;
+    console.log('startGame function called');
+    console.log('Room:', room);
+    console.log('Nickname:', nickname);
+    console.log('Room host nickname:', room?.host_nickname);
+    
+    if (!room || room.host_nickname !== nickname) {
+      console.log('Cannot start game - not host or no room');
+      return;
+    }
 
     try {
+      console.log('Updating room status to playing...');
       await supabase
         .from('game_rooms')
         .update({ status: 'playing' })
         .eq('id', room.id);
+      console.log('Room status updated successfully');
+      
+      // Fallback: manually refresh room data in case real-time isn't working
+      setTimeout(async () => {
+        console.log('Manually refreshing room data...');
+        const { data: updatedRoom, error } = await supabase
+          .from('game_rooms')
+          .select('*')
+          .eq('id', room.id)
+          .single();
+        
+        if (!error && updatedRoom) {
+          console.log('Manually updated room:', updatedRoom);
+          setRoom(updatedRoom);
+        }
+      }, 1000);
+      
     } catch (err) {
       console.error('Error starting game:', err);
     }
@@ -293,7 +319,9 @@ export function useSupabaseRoom(roomCode: string | null, nickname: string) {
               filter: `id=eq.${roomData.id}`
             },
             (payload) => {
+              console.log('Room change received:', payload);
               if (payload.eventType === 'UPDATE') {
+                console.log('Updating room state:', payload.new);
                 setRoom(payload.new as GameRoom);
               } else if (payload.eventType === 'DELETE') {
                 setError('Room was deleted');

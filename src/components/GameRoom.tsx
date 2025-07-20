@@ -45,8 +45,16 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
 
   // Handle starting game
   const handleStartGame = () => {
-    if (isHost && allPlayersReady) {
+    console.log('Start Game clicked!');
+    console.log('Is host:', isHost);
+    console.log('Simple can start game:', simpleCanStartGame);
+    console.log('All players ready:', allPlayersReady);
+    
+    if (simpleCanStartGame) {
+      console.log('Calling startGame()...');
       startGame();
+    } else {
+      console.log('Cannot start game - conditions not met');
     }
   };
 
@@ -94,6 +102,16 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
   );
   const canStartGame = isHost && players.length >= 1 && allPlayersReady;
 
+  // Debug logging
+  console.log('Debug - Players:', players);
+  console.log('Debug - Room host:', room?.host_nickname);
+  console.log('Debug - Is host:', isHost);
+  console.log('Debug - All players ready:', allPlayersReady);
+  console.log('Debug - Can start game:', canStartGame);
+
+  // Alternative simpler logic: host can always start if there are players
+  const simpleCanStartGame = isHost && players.length >= 1;
+
   // Show game playing state
   if (room?.status === 'playing') {
     return (
@@ -120,6 +138,8 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
                 roundNumber={currentRound.round_number}
                 timePerRound={room.settings.timePerRound}
                 onSequenceHidden={handleSequenceHidden}
+                roundId={currentRound.id}
+                nickname={nickname}
               />
             ) : (
               <div className="bg-white rounded-lg shadow-lg p-8 border border-gray-200">
@@ -389,9 +409,9 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
             <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
               <button
                 onClick={handleStartGame}
-                disabled={!canStartGame}
+                disabled={!simpleCanStartGame}
                 className={`w-full py-4 px-4 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2 ${
-                  canStartGame
+                  simpleCanStartGame
                     ? 'bg-green-600 text-white hover:bg-green-700'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
@@ -400,11 +420,17 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
                 <span>Start Game</span>
               </button>
               
-              {!allPlayersReady && (
+              {!simpleCanStartGame && (
                 <p className="text-sm text-gray-500 text-center mt-2">
-                  Waiting for all players to be ready...
+                  {!isHost ? 'Only the host can start the game' : 'Need at least 1 player to start'}
                 </p>
               )}
+
+              {/* Debug info */}
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs">
+                <p>Debug: Players: {players.length}, Is Host: {isHost.toString()}</p>
+                <p>All Ready: {allPlayersReady.toString()}, Can Start: {simpleCanStartGame.toString()}</p>
+              </div>
             </div>
           )}
 
