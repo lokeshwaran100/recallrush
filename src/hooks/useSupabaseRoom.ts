@@ -477,9 +477,19 @@ export function useSupabaseRoom(roomCode: string | null, nickname: string) {
             },
             (payload) => {
               console.log('Round change received:', payload);
-              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                console.log('Setting current round to:', payload.new);
+              if (payload.eventType === 'INSERT') {
+                // New round created - always set as current
+                console.log('New round created, setting as current:', payload.new);
                 setCurrentRound(payload.new as GameRound);
+              } else if (payload.eventType === 'UPDATE') {
+                const updatedRound = payload.new as GameRound;
+                console.log('Round updated:', updatedRound);
+                
+                // Only update current round if it's becoming active or if it's the same round we're tracking
+                if (updatedRound.status === 'active' || (currentRound && updatedRound.id === currentRound.id)) {
+                  console.log('Updating current round to:', updatedRound);
+                  setCurrentRound(updatedRound);
+                }
               }
             }
           )

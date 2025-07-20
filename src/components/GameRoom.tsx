@@ -106,12 +106,14 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
 
   // Handle round completion
   const handleRoundComplete = React.useCallback(async () => {
-    // Only show results if we're not already showing them and the round is completed
-    if (!showRoundResults && currentRound && currentRound.status === 'completed') {
+    // Only show results if we're not already showing them
+    if (!showRoundResults && !showFinalResults) {
       console.log('Showing round results for completed round');
       setShowRoundResults(true);
+    } else {
+      console.log('Not showing results - showRoundResults:', showRoundResults, 'showFinalResults:', showFinalResults);
     }
-  }, [showRoundResults, currentRound]);
+  }, [showRoundResults, showFinalResults]);
 
   // Handle next round
   const handleNextRound = React.useCallback(async () => {
@@ -146,9 +148,10 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
   React.useEffect(() => {
     if (currentRound && showRoundResults && currentRound.status === 'active') {
       // New active round has started, reset the results view
+      console.log('New active round detected, resetting round results view');
       setShowRoundResults(false);
     }
-  }, [currentRound, showRoundResults]);
+  }, [currentRound?.id, currentRound?.status, showRoundResults]);
 
   // Handle game completion
   const handleGameComplete = React.useCallback(() => {
@@ -245,17 +248,23 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
             console.log('All players submitted, completing round');
             
             // Mark the round as completed to prevent further triggers
-            await supabase
+            const { data: updatedRound, error: updateError } = await supabase
               .from('game_rounds')
               .update({ status: 'completed' })
-              .eq('id', currentRound.id);
+              .eq('id', currentRound.id)
+              .select()
+              .single();
             
-            // Show results after a short delay
-            setTimeout(() => {
-              if (!showRoundResults && !showFinalResults) {
-                handleRoundComplete();
-              }
-            }, 1000); // Reduced delay since we're marking as completed
+            if (!updateError && updatedRound) {
+              console.log('Round marked as completed:', updatedRound);
+              
+              // Show results after a short delay
+              setTimeout(() => {
+                if (!showRoundResults && !showFinalResults) {
+                  handleRoundComplete();
+                }
+              }, 1000); // Reduced delay since we're marking as completed
+            }
           }
         } catch (err) {
           console.error('Error checking round completion:', err);
@@ -302,7 +311,9 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
   }
 
   // Show round results
+  console.log('Checking round results render - showRoundResults:', showRoundResults, 'currentRound:', currentRound, 'room:', room);
   if (showRoundResults && currentRound && room) {
+    console.log('Rendering RoundResults component');
     return (
       <div className="max-w-4xl mx-auto px-4 py-4">
         <RoundResults
