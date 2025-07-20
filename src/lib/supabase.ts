@@ -32,6 +32,10 @@ export interface RoomPlayer {
   is_ready: boolean;
   joined_at: string;
   last_seen: string;
+  score?: number;
+  correct_answers?: number;
+  fastest_answers?: number;
+  total_time?: number;
 }
 
 export interface GameRound {
@@ -41,4 +45,15 @@ export interface GameRound {
   sequence: number[];
   status: 'active' | 'completed';
   created_at: string;
+}
+
+export interface RoundAnswer {
+  id: string;
+  round_id: string;
+  nickname: string;
+  answer: number[];
+  submitted_at: string;
+  time_taken?: number;
+  is_correct?: boolean;
+  is_fastest?: boolean;
 }

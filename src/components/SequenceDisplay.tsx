@@ -7,6 +7,7 @@ interface SequenceDisplayProps {
   roundNumber: number;
   timePerRound: number;
   onSequenceHidden: () => void;
+  onRoundComplete: () => void;
   roundId: string;
   nickname: string;
 }
@@ -16,6 +17,7 @@ export default function SequenceDisplay({
   roundNumber, 
   timePerRound, 
   onSequenceHidden,
+  onRoundComplete,
   roundId,
   nickname
 }: SequenceDisplayProps) {
@@ -25,6 +27,7 @@ export default function SequenceDisplay({
   const [answerTimer, setAnswerTimer] = React.useState(timePerRound);
   const [submitted, setSubmitted] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [startTime, setStartTime] = React.useState<number | null>(null);
 
   // Show sequence for 3 seconds
   React.useEffect(() => {
@@ -53,11 +56,13 @@ export default function SequenceDisplay({
   React.useEffect(() => {
     if (showSequence || submitted) return;
     setAnswerTimer(timePerRound);
+    setStartTime(Date.now());
     const timer = setInterval(() => {
       setAnswerTimer(prev => {
         if (prev <= 1) {
           clearInterval(timer);
           handleSubmit();
+          onRoundComplete();
           return 0;
         }
         return prev - 1;
@@ -76,11 +81,15 @@ export default function SequenceDisplay({
         .split(',')
         .map(n => parseInt(n.trim(), 10))
         .filter(n => !isNaN(n));
+      
+      const timeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : null;
+      
       await supabase.from('round_answers').insert({
         round_id: roundId,
         nickname,
         answer: answerArr,
         submitted_at: new Date().toISOString(),
+        time_taken: timeTaken,
       });
     } catch (err) {
       setSubmitError('Failed to submit answer.');

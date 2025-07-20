@@ -1,7 +1,10 @@
 import React from 'react';
 import { Users, Crown, Settings, Play } from 'lucide-react';
 import { useSupabaseRoom } from '../hooks/useSupabaseRoom';
+import { supabase } from '../lib/supabase';
 import SequenceDisplay from './SequenceDisplay';
+import RoundResults from './RoundResults';
+import FinalResults from './FinalResults';
 
 interface GameRoomProps {
   nickname: string;
@@ -16,6 +19,8 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
   const [sequenceHidden, setSequenceHidden] = React.useState<boolean>(false);
   const [isStartingRound, setIsStartingRound] = React.useState<boolean>(false);
   const [roundStarted, setRoundStarted] = React.useState<boolean>(false);
+  const [showRoundResults, setShowRoundResults] = React.useState<boolean>(false);
+  const [showFinalResults, setShowFinalResults] = React.useState<boolean>(false);
 
   const { 
     room, 
@@ -99,6 +104,106 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
     setSequenceHidden(true);
   }, []);
 
+  // Handle round completion
+  const handleRoundComplete = React.useCallback(() => {
+    setShowRoundResults(true);
+  }, []);
+
+  // Handle next round
+  const handleNextRound = React.useCallback(async () => {
+    setShowRoundResults(false);
+    setSequenceHidden(false);
+    if (isHost && room?.status === 'playing') {
+      setIsStartingRound(true);
+      try {
+        // Clear previous round's answers before starting new round
+        // This ensures clean state for the new round
+        if (currentRound) {
+          await supabase
+            .from('round_answers')
+            .delete()
+            .eq('round_id', currentRound.id);
+          console.log('Cleared previous round answers before starting new round');
+        }
+        
+        await startRound();
+        console.log('Next round started successfully');
+        setRoundStarted(true);
+        setTimeout(() => setRoundStarted(false), 3000);
+      } catch (err) {
+        console.error('Failed to start next round:', err);
+      } finally {
+        setIsStartingRound(false);
+      }
+    }
+  }, [isHost, room?.status, startRound, currentRound]);
+
+  // Reset starting state when new round is detected
+  React.useEffect(() => {
+    if (currentRound && showRoundResults && currentRound.status === 'active') {
+      // New active round has started, reset the results view
+      setShowRoundResults(false);
+    }
+  }, [currentRound, showRoundResults]);
+
+  // Handle game completion
+  const handleGameComplete = React.useCallback(() => {
+    setShowFinalResults(true);
+  }, []);
+
+  // Handle new game
+  const handleNewGame = React.useCallback(async () => {
+    if (!room || !isHost) return;
+    
+    try {
+      // Clear all round answers from previous game
+      await supabase
+        .from('round_answers')
+        .delete()
+        .in('round_id', 
+          (await supabase
+            .from('game_rounds')
+            .select('id')
+            .eq('room_id', room.id)
+          ).data?.map(r => r.id) || []
+        );
+      console.log('Cleared all round answers from previous game');
+
+      // Clear all game rounds
+      await supabase
+        .from('game_rounds')
+        .delete()
+        .eq('room_id', room.id);
+      console.log('Cleared all game rounds');
+
+      // Reset room to waiting status
+      await supabase
+        .from('game_rooms')
+        .update({ 
+          status: 'waiting',
+          current_round: 0
+        })
+        .eq('id', room.id);
+
+      // Reset player scores
+      await supabase
+        .from('room_players')
+        .update({
+          score: 0,
+          correct_answers: 0,
+          fastest_answers: 0,
+          total_time: 0
+        })
+        .eq('room_id', room.id);
+
+      setShowFinalResults(false);
+      setShowRoundResults(false);
+      setSequenceHidden(false);
+    } catch (err) {
+      console.error('Error starting new game:', err);
+    }
+  }, [room, isHost]);
+
   // Reset sequence hidden state when new round starts
   React.useEffect(() => {
     if (currentRound) {
@@ -106,10 +211,39 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
     }
   }, [currentRound?.id]);
 
-  // Monitor currentRound changes
+  // Monitor currentRound changes and check for round completion
   React.useEffect(() => {
     console.log('Current round changed:', currentRound);
-  }, [currentRound]);
+    
+    if (currentRound && currentRound.status === 'active' && !showRoundResults && !showFinalResults) {
+      // Check if all players have submitted answers
+      const checkRoundCompletion = async () => {
+        try {
+          const { data: answers, error } = await supabase
+            .from('round_answers')
+            .select('nickname')
+            .eq('round_id', currentRound.id);
+
+          if (!error && answers && answers.length >= players.length) {
+            // All players have submitted, show results after a short delay
+            setTimeout(() => {
+              if (!showRoundResults && !showFinalResults) {
+                handleRoundComplete();
+              }
+            }, 2000); // Wait 2 seconds after last submission
+          }
+        } catch (err) {
+          console.error('Error checking round completion:', err);
+        }
+      };
+
+      // Check immediately and then every 3 seconds
+      checkRoundCompletion();
+      const interval = setInterval(checkRoundCompletion, 3000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [currentRound, players.length, showRoundResults, showFinalResults, handleRoundComplete]);
 
   // Check if all players are ready
   const allPlayersReady = players.every(player => 
@@ -127,6 +261,37 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
 
   // Alternative simpler logic: host can always start if there are players
   const simpleCanStartGame = isHost && players.length >= 1;
+
+  // Show final results
+  if (showFinalResults && room) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-4">
+        <FinalResults
+          roomId={room.id}
+          onNewGame={handleNewGame}
+          onLeaveRoom={handleLeaveRoom}
+          isHost={isHost}
+        />
+      </div>
+    );
+  }
+
+  // Show round results
+  if (showRoundResults && currentRound && room) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-4">
+        <RoundResults
+          round={currentRound}
+          roomId={room.id}
+          onNextRound={handleNextRound}
+          onGameComplete={handleGameComplete}
+          isHost={isHost}
+          totalRounds={room.settings.rounds}
+          currentRoundNumber={currentRound.round_number}
+        />
+      </div>
+    );
+  }
 
   // Show game playing state
   if (room?.status === 'playing') {
@@ -155,6 +320,7 @@ export default function GameRoom({ nickname, roomCode, isHost, onStartGame, onLe
                 roundNumber={currentRound.round_number}
                 timePerRound={room.settings.timePerRound}
                 onSequenceHidden={handleSequenceHidden}
+                onRoundComplete={handleRoundComplete}
                 roundId={currentRound.id}
                 nickname={nickname}
               />

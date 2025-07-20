@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, GameRoom, RoomPlayer, GameRound } from '../lib/supabase';
+import { supabase, GameRoom, RoomPlayer, GameRound, RoundAnswer } from '../lib/supabase';
 
 export function useSupabaseRoom(roomCode: string | null, nickname: string) {
   const [room, setRoom] = useState<GameRoom | null>(null);
@@ -236,6 +236,14 @@ export function useSupabaseRoom(roomCode: string | null, nickname: string) {
     try {
       console.log('Starting new round...');
       
+      // Mark any existing active rounds as completed instead of deleting them
+      await supabase
+        .from('game_rounds')
+        .update({ status: 'completed' })
+        .eq('room_id', room.id)
+        .eq('status', 'active');
+      console.log('Marked existing active rounds as completed');
+      
       // Generate random sequence based on difficulty
       const sequenceLength = room.settings.difficulty === 'easy' ? 4 : 
                            room.settings.difficulty === 'medium' ? 6 : 8;
@@ -282,6 +290,27 @@ export function useSupabaseRoom(roomCode: string | null, nickname: string) {
       }
 
       console.log('Room updated with new round number');
+
+      // Set the current round immediately
+      setCurrentRound(roundData);
+
+      // Clear previous round's answers after the new round is created
+      // This prevents interference with the new round
+      setTimeout(async () => {
+        const { data: previousRounds, error: prevError } = await supabase
+          .from('game_rounds')
+          .select('id')
+          .eq('room_id', room.id)
+          .eq('status', 'completed');
+        
+        if (!prevError && previousRounds && previousRounds.length > 0) {
+          await supabase
+            .from('round_answers')
+            .delete()
+            .in('round_id', previousRounds.map(r => r.id));
+          console.log('Cleared answers from completed rounds');
+        }
+      }, 2000);
 
       // Fallback: manually fetch the round data in case real-time isn't working
       setTimeout(async () => {
